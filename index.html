@@ -2,15 +2,37 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Super Gemini - World 1 (Enter to Jump)</title>
+    <title>Super Gemini - Responsive Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; height: 100vh; }
+        canvas { background: #6cf; touch-action: none; }
+    </style>
 </head>
-<body style="margin:0;overflow:hidden;background:#000;touch-action:none;">
+<body>
 <canvas id="c"></canvas>
 
 <script>
 var c = document.getElementById("c");
-c.width = 400; c.height = 200;
 var g = c.getContext("2d");
+
+// ゲームの基本解像度
+var GW = 400, GH = 200;
+var scale = 1;
+
+function resize() {
+    var winW = window.innerWidth;
+    var winH = window.innerHeight;
+    scale = Math.min(winW / GW, winH / GH);
+    c.width = GW * scale;
+    c.height = GH * scale;
+    // 描画をスケーリングに合わせる
+    g.scale(scale, scale);
+    // アンチエイリアスを切ってドットをくっきりさせる
+    g.imageSmoothingEnabled = false;
+}
+window.onresize = resize;
+resize();
 
 var stages = [
     {n:"1-1", H:[[350,60]],B:[[340,140,40,20,0]],E:[[250,150,0.8,1,0,100,600,0]],goal:700},
@@ -32,15 +54,10 @@ function init(){
     t=0; boost=0; dead=0; cleared=0; isDash = false;
     d = stages[stageIdx];
     E = JSON.parse(JSON.stringify(d.E || []));
-    H = (d.H || []).slice().sort(function(a, b) { return a[0] - b[0]; });
+    H = (d.H || []).slice().sort((a, b) => a[0] - b[0]);
     B = (d.B || []).slice();
     M = [];
-    if(d.M){
-        for(var i=0; i<d.M.length; i++){
-            var mData = d.M[i];
-            M.push({ ox: mData[0], oy: mData[1], type: mData[2], range: mData[3] || 50, phase: mData[4] || 0, px: mData[0], py: mData[1] });
-        }
-    }
+    if(d.M) for(var i=0; i<d.M.length; i++) M.push({ ox: d.M[i][0], oy: d.M[i][1], type: d.M[i][2], range: d.M[i][3] || 50, phase: d.M[i][4] || 0, px: d.M[i][0], py: d.M[i][1] });
     goal = d.goal;
 }
 init();
@@ -49,9 +66,7 @@ c.onclick = function() { if(dead) init(); };
 
 window.onkeydown = function(e) {
     if(e.keyCode >= 49 && e.keyCode <= 56) { stageIdx = e.keyCode - 49; init(); return; }
-    // Enter(13)でもリスタート可能に
     if(e.keyCode === 13 && dead) { init(); return; }
-    
     var now = new Date().getTime();
     if(e.keyCode === 37 || e.keyCode === 39) {
         if(lastKey === e.keyCode && (now - lastTapTime) < 300) isDash = true;
@@ -63,7 +78,7 @@ window.onkeyup = function(e) { k[e.keyCode] = 0; if(!k[37] && !k[39]) isDash = f
 
 setInterval(function(){
     t++;
-    g.fillStyle = "#6cf"; g.fillRect(0, 0, 400, 200);
+    g.fillStyle = "#6cf"; g.fillRect(0, 0, GW, GH);
     
     if(dead){
         g.fillStyle = "#000"; g.textAlign = "center";
@@ -72,12 +87,9 @@ setInterval(function(){
         g.textAlign = "left"; return;
     }
 
-    var maxSpeed = isDash ? 3.6 : 2.4;
-    var accel = onGround ? 0.4 : 0.15;
+    var maxSpeed = isDash ? 3.6 : 2.4, accel = onGround ? 0.4 : 0.15;
     if(k[37]) vx -= accel; else if(k[39]) vx += accel; else vx *= onGround ? 0.7 : 0.96;
     if(vx > maxSpeed) vx = maxSpeed; if(vx < -maxSpeed) vx = -maxSpeed;
-    
-    // ★Enter(13)キーまたは上矢印(38)でジャンプ
     if((k[38] || k[13]) && onGround) { vy = boost ? -8.8 : -6.4; onGround = 0; }
     
     vy += 0.38; if(vy > 9) vy = 9;
@@ -100,22 +112,20 @@ setInterval(function(){
     }
 
     for(var i=0; i<B.length; i++){
-        var b = B[i], bx=b[0], by=b[1], bw=b[2], bh=b[3], btype=b[4];
-        if(btype==20){ g.fillStyle="#f00"; g.fillRect(bx-s,by,bw,bh); }
-        else { g.fillStyle = (btype == 10) ? "#f90" : "#964B00"; g.fillRect(bx - s, by, bw, bh); }
+        var b = B[i], bx=b[0], by=b[1], bw=b[2], bh=b[3], bt=b[4];
+        g.fillStyle = (bt==20) ? "#f00" : (bt==10) ? "#f90" : "#964B00";
+        g.fillRect(bx-s, by, bw, bh);
         if (x < bx + bw && x + PW > bx && y < by + bh && y + PH > by) {
-            if(btype == 20) { dead = 1; continue; }
-            var fT = py + PH <= by, fB = py >= by + bh, fL = px + PW <= bx, fR = px >= bx + bw;
-            if (fT) { y = by - PH; vy = 0; onGround = 1; if(btype == 10) boost = 1; }
-            else if (fB) { y = by + bh; vy = 0; }
-            else if (fL) { x = bx - PW; vx = 0; }
-            else if (fR) { x = bx + bw; vx = 0; }
+            if(bt == 20) { dead = 1; continue; }
+            if (py + PH <= by) { y = by - PH; vy = 0; onGround = 1; if(bt == 10) boost = 1; }
+            else if (py >= by + bh) { y = by + bh; vy = 0; }
+            else if (px + PW <= bx) { x = bx - PW; vx = 0; }
+            else { x = bx + bw; vx = 0; }
         }
     }
 
     g.fillStyle = "#888";
-    for(var i=0; i<M.length; i++){
-        var m = M[i];
+    for(var m of M){
         var mx = m.type === 1 ? m.ox + Math.sin(t / 40 + m.phase) * m.range : m.ox;
         var my = m.type === 1 ? m.oy : m.oy + Math.sin(t / 30 + m.phase) * m.range;
         var dx = mx - m.px; g.fillRect(mx - s, my, 50, 8);
@@ -123,17 +133,16 @@ setInterval(function(){
         m.px = mx; m.py = my;
     }
 
-    for(var i=0; i<E.length; i++){
-        var e = E[i]; if(!e[3]) continue;
-        if(e[7] === 1){
-            e[1] = e[8] + Math.sin(t * e[9] + e[10]) * 40; 
-            g.fillStyle = "#f0f"; 
-        } else {
+    for(var e of E){
+        if(!e[3]) continue;
+        if(e[7] === 1) e[1] = e[8] + Math.sin(t * e[9] + e[10]) * 40; 
+        else {
             var nX = e[0] + e[2], hole = false;
-            for(var j=0; j<H.length; j++) if(nX > H[j][0]-5 && nX < H[j][0]+H[j][1]) hole = true;
+            for(var h of H) if(nX > h[0]-5 && nX < h[0]+h[1]) hole = true;
             if(nX < e[5] || nX > e[6] || (hole && e[1]>=150)) e[2] *= -1;
-            e[0] += e[2]; g.fillStyle = "#f00";
+            e[0] += e[2];
         }
+        g.fillStyle = (e[7]===1) ? "#f0f" : "#f00";
         g.fillRect(e[0] - s, e[1], 10, 10);
         if(x < e[0] + 10 && x + PW > e[0] && y < e[1] + 10 && y + PH > e[1]){
             if(vy > 0 && py + PH <= e[1] && e[7]===0){ vy = -5; e[3] = 0; } else { dead = 1; }
@@ -147,8 +156,7 @@ setInterval(function(){
         if(stageIdx >= stages.length){ alert("World 1 Clear!"); stageIdx = 0; }
         init();
     }
-    g.fillStyle = "#000"; 
-    g.fillText("STAGE: " + d.n + " (Jump: Up or Enter)", 10, 15);
+    g.fillStyle = "#000"; g.fillText("STAGE: " + d.n, 10, 15);
 }, 25);
 </script>
 </body>
